@@ -1,0 +1,222 @@
+
+<head>
+  <title>Covid Bubble Chart</title>
+</head>
+
+<style>
+</style>
+
+<body style="background:#f8f8f0">
+
+  <svg width="1400" height="900">
+
+    <g transform="translate(800, 350)" id="bubbles"></g>
+    <g id="info">
+      <text x="20" y="180" font-family="Verdana" font-size="35" id="country"></text>
+      <text x="20" y="230" font-family="Verdana" font-size="25" id="newCases"></text>
+      <text x="20" y="280" font-family="Verdana" font-size="25" id="newDeaths"></text>
+      <text x="20" y="330" font-family="Verdana" font-size="25" id="totalCases"></text>
+      <text x="20" y="380" font-family="Verdana" font-size="25" id="totalDeaths"></text>
+      <text x="20" y="430" font-family="Verdana" font-size="25" id="population"></text>
+    </g>
+    <g x="30" y="10" id="button">
+      <rect width="300" height="100" style="fill:white;stroke-width:2;stroke:black" />
+      <text x="10%" y="6%" dominant-baseline="middle" font-size="25" text-anchor="middle">Separate</text>
+    </g>
+    <g  x=0 y=100 font-family="Verdana" font-size="20" id="legend">
+      <text x="20" y="500" >Radius - Total Cases by Population</text>
+      <text x="20" y="550" >Opacity - Total Deaths by Population</text>
+      <text x="20" y="600" >Color - Continent</text>
+
+      <text x="30" y="663" >Africa</text>
+      <rect width="90" height="50" x=20 y=680 style="fill:#059142" id="AFR" />
+
+      <text x="170" y="663" >Oceania</text>
+      <rect width="90" height="50" x=170 y=680 style="fill:#8B008B" id="OC" />
+
+      <text x="300" y="663" >South America</text>
+      <rect width="90" height="50" x=330 y=680 style="fill:orange" id="SA" />
+
+      <text x="480" y="663" >Europe</text>
+      <rect width="90" height="50" x=470 y=680 style="fill:#0044aa" id="EU" />
+
+      <text x="643" y="663" >Asia</text>
+      <rect width="90" height="50" x=620 y=680 style="fill:#FF7F50" id="AS" />
+
+      <text x="750" y="663" >North America</text>
+      <rect width="90" height="50" x=770 y=680 style="fill:#DC143C" id="NA" />
+
+    </g>
+  </svg>
+
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.2.2/d3.min.js"></script>
+
+  <script>
+
+
+let separatedBool = false;
+let radiusScale;
+let opacityScale;
+let updateInput;
+var data;
+let keys;
+
+let colorMap = {
+  "Europe" : '#0044aa', // blue
+  "Asia" : '#FF7F50', // orange
+  "North America" : '#DC143C', // dark red
+  "Africa" : '#059142', // green
+  "South America" : 'orange',
+  "Oceania" : '#8B008B' //violet
+}
+let forceMap = {
+  "Europe" :[-200,70],
+  "Asia" : [300,-150],
+  "North America" : [400,250],
+  "Africa" : [200,150],
+  "South America" : [0,-230],
+  "Oceania" : [-300,-270]
+}
+
+
+let svg = d3.select("body svg");
+let button = svg.select("#button");
+
+let circlesGroup = svg.select('#bubbles');
+let infoGroup = svg.select('#country');
+
+// add button behavior
+button.on("click",updateSeparation)
+    .on("mouseover", function(){
+      button.select('rect').style('stroke-width',3)
+    })
+    .on("mouseleave", function(){
+      button.select('rect').style('stroke-width',1)
+    })
+
+
+// get data and run the main draw functions
+d3.json('data/data.json', function(d) {
+  data = d;
+  console.log(data);
+  createScales();
+  draw();
+  button.on("click", function() {
+    updateSeparation();
+  })
+});
+
+// updates the forces
+function updateSeparation() {
+  separatedBool = !separatedBool;
+  drawBubbles(separatedBool);
+}
+
+function draw(){
+  drawBubbles(separatedBool);
+}
+
+// Shows the info that appears when mouse hovers over bubbles
+function hoverInfo(){
+  circlesGroup.selectAll('circle').on("mouseover",function(d) {
+    svg.select('#info #country').text(d.country + " | " + d.continent)
+    svg.select('#info #population').text("Population: " + d.population)
+    svg.select('#info #newCases').text("New Cases: " + d.newCases)
+    svg.select('#info #newDeaths').text("New Deaths: " + d.newDeaths)
+    svg.select('#info #totalCases').text("Total Cases: " + d.totalCases)
+    svg.select('#info #totalDeaths').text("Total Deaths: " + d.totalDeaths)
+
+  })
+  .on("mouseleave", function(d) {
+    svg.select('#info').selectAll('text').text("")
+  })
+}
+
+// draw bubble chart
+function drawBubbles(separatedBool) {
+  let simulation = d3.forceSimulation(data)
+    .force('x', d3.forceX().x(function(d) {
+      if (separatedBool) {
+        return forceMap[d.continent][0];
+      } else {
+        return 0;
+      }
+    }))
+    .force('y', d3.forceY().y(function(d) {
+      if (separatedBool) {
+        return forceMap[d.continent][1];
+      } else {
+        return 0;
+      }
+    }))
+    .force('collision', d3.forceCollide().radius(function(d) {
+      return radiusScale(d.totalCases / d.population) + 2;
+    }))
+    .force("charge", d3.forceManyBody().strength(-20))
+    .on('tick', oneTick);
+
+
+    function oneTick() {
+      hoverInfo();
+
+      let u = circlesGroup.selectAll('circle')
+        .data(data);
+
+      u.enter()
+        .append('circle')
+        .style('fill', function(d) {
+          return colorMap[d.continent];
+        })
+        .style('stroke', function(d) {
+          return colorMap[d.continent]
+        })
+        .style('stroke-width',3)
+        .merge(u)
+        .attr('cx', function(d) {
+          return d.x;
+        })
+        .attr('cy', function(d) {
+          return d.y;
+        })
+        .attr('r', function(d) {
+          return radiusScale(d.totalCases/ d.population);
+        })
+        .attr('fill-opacity',function(d){
+          return opacityScale(d.totalDeaths / d.population);
+        })
+
+      u.exit().remove();
+    }
+}
+
+// create scales for the values
+function createScales() {
+
+  let maxRadius = Number.MIN_VALUE;
+  let maxOpac = Number.MIN_VALUE;
+  let minOpac = Number.MAX_VALUE;
+  let minRadius = Number.MAX_VALUE;
+
+  data.forEach(function(item) {
+    for (key in item) {
+      maxOpac = Math.max(maxOpac, item["totalDeaths"]/ item["population"]);
+      minOpac = Math.min(minOpac, item["totalDeaths"]/ item["population"]);
+      maxRadius = Math.max(maxRadius, item["totalCases"]/ item["population"]);
+      minRadius = Math.min(minRadius, item["totalCases"]/ item["population"]);
+    }
+  })
+
+  radiusScale = d3.scaleLinear()
+                    .domain([minRadius, maxRadius])
+                    .range([5, 95]);
+
+  opacityScale = d3.scaleLinear()
+                    .domain([minOpac, maxOpac])
+                    .range([0.2, 1]);
+
+}
+
+  </script>
+</body>
+</html>
